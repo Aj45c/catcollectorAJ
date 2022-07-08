@@ -1,7 +1,11 @@
+from subprocess import CompletedProcess
 from django.shortcuts import render, redirect
 from django.views.generic.edit import CreateView, UpdateView, DeleteView
 from django.views.generic import ListView
 from django.views.generic.detail import DetailView
+from django.contrib.auth import login
+from django.contrib.auth.forms import UserCreationForm
+from psycopg2 import DatabaseError
 from .models import Cat, Toy, Photo
 from .forms import FeedingForm
 
@@ -9,7 +13,7 @@ import uuid
 import boto3
 
 S3_BASE_URL = 'https://s3.us-east-1.amazonaws.com/'
-BUCKET = 'catcollector-avatar-99'
+BUCKET = 'catcollectaj'
 
 
 
@@ -30,7 +34,7 @@ def about(request):
   return render(request, 'about.html')
 
 def cats_index(request):
-  cats = Cat.objects.all()
+  cats = Cat.objects.all(user=request.user)
   return render(request, 'cats/index.html', { 'cats': cats })
 
 def cats_detail(request, cat_id):
@@ -90,11 +94,37 @@ def add_photo(request, cat_id):
   return redirect('detail', cat_id=cat_id)
   # redirect the user to the origin 
 
+def signup(request):
+  # check if the request method is POST
+  # we need to create a new user because form was submmited
+
+  # 1} use the form data from the request to create a form/model instance from the model forma
+  # 2}validate the form to ensure it was Completed
+  # 3)saving the user object to the Database
+  # $)log in the user(creates a sesson for the logged in user)
+  error_message = ''
+  if request.method == 'POST':
+    form = UserCreationForm(request.POST)
+    if form.is_valid():
+      user = form.save()
+      login(request, user)
+      return redirect('index')
+    else:
+      error_message = 'Invalid Info - Please Try Again'
+  form = UserCreationForm()
+  context = {'form': form, 'error_message': error_message}
+  return render(request, 'registration/signup.html' , context)
+
 
 class CatCreate(CreateView):
   model = Cat
   fields = ['name', 'breed', 'description', 'age']
   success_url = '/cats/'
+  def form_valid(self, form):
+    # Assign the logged in user (self.request.user)
+    form.instance.user = self.request.user  # form.instance is the cat
+    # Let the CreateView do its job as usual
+    return super().form_valid(form)
 
 class CatUpdate(UpdateView):
   model = Cat
